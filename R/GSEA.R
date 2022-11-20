@@ -112,7 +112,7 @@ GSEA <- function(input.ds, input.cls, input.chip = "NOCHIP", gene.ann = "", gs.d
  gs.size.threshold.max = 500, reverse.sign = F, preproc.type = 0, random.seed = as.integer(Sys.time()), 
  perm.type = 0, fraction = 1, replace = F, collapse.dataset = FALSE, collapse.mode = "NOCOLLAPSE", 
  save.intermediate.results = F, use.fast.enrichment.routine = T, gsea.type = "GSEA", 
- rank.metric = "S2N") {
+ rank.metric = "S2N", catchPathways = NULL) {
  
  print(" *** Running Gene Set Enrichment Analysis...")
  
@@ -1219,14 +1219,18 @@ GSEA <- function(input.ds, input.cls, input.chip = "NOCHIP", gene.ann = "", gs.d
   topgs <- floor(Ng/2)
  }
  
- for (i in 1:Ng) {
-  if ((p.vals[i, 1] <= nom.p.val.threshold) || (p.vals[i, 2] <= fwer.p.val.threshold) || 
-   (FDR.mean.sorted[i] <= fdr.q.val.threshold) || (is.element(i, c(Obs.ES.index[1:topgs], 
-   Obs.ES.index[(Ng - topgs + 1):Ng])))) 
-   {
-    
-    # produce report per gene set
-    
+ apply(as.matrix(1:Ng), 1, function(i){
+  tryCatch(dev.off(), error = function(e) NULL)
+  tryCatch(dev.off(), error = function(e) NULL)
+  tryCatch(dev.off(), error = function(e) NULL)
+  theSpecificPathway <- FALSE
+  if (!is.null(catchPathways)) {
+    theSpecificPathway <- length(grep(paste(catchPathways, collapse = "|"), gs.names[i], ignore.case = T)) > 0
+  }
+  if ((p.vals[i, 1] <= nom.p.val.threshold) || (p.vals[i,2] <= fwer.p.val.threshold) || 
+      (FDR.mean.sorted[i] <= fdr.q.val.threshold) || 
+      (is.element(i, c(Obs.ES.index[1:topgs], Obs.ES.index[(Ng - topgs + 1):Ng]))) || 
+      theSpecificPathway) {
     kk <- 1
     gene.number <- vector(length = size.G[i], mode = "character")
     gene.names <- vector(length = size.G[i], mode = "character")
@@ -1237,70 +1241,62 @@ GSEA <- function(input.ds, input.cls, input.chip = "NOCHIP", gene.ann = "", gs.d
     gene.rnk <- vector(length = size.G[i], mode = "numeric")
     gene.RES <- vector(length = size.G[i], mode = "numeric")
     rank.list <- seq(1, N)
-    
     if (Obs.ES[i] >= 0) {
       set.k <- seq(1, N, 1)
       phen.tag <- phen1
       loc <- match(i, Obs.ES.index)
-    } else {
+    }else {
       set.k <- seq(N, 1, -1)
       phen.tag <- phen2
       loc <- Ng - match(i, Obs.ES.index) + 1
     }
-    
     for (k in set.k) {
       if (Obs.indicator[i, k] == 1) {
-     gene.number[kk] <- kk
-     # gene.names[kk] <- obs.gene.labels[k]
-     gene.symbols[kk] <- obs.gene.symbols[k]
-     gene.descs[kk] <- obs.gene.descs[k]
-     gene.list.loc[kk] <- k
-     gene.rnk[kk] <- signif(obs.rnk[k], digits = 3)
-     gene.RES[kk] <- signif(Obs.RES[i, k], digits = 3)
-     if (Obs.ES[i] >= 0) {
-       core.enrichment[kk] <- ifelse(gene.list.loc[kk] <= Obs.arg.ES[i], 
-      "YES", "NO")
-     } else {
-       core.enrichment[kk] <- ifelse(gene.list.loc[kk] > Obs.arg.ES[i], 
-      "YES", "NO")
-     }
-     kk <- kk + 1
+        gene.number[kk] <- kk
+        gene.symbols[kk] <- obs.gene.symbols[k]
+        gene.descs[kk] <- obs.gene.descs[k]
+        gene.list.loc[kk] <- k
+        gene.rnk[kk] <- signif(obs.rnk[k], digits = 3)
+        gene.RES[kk] <- signif(Obs.RES[i, k], digits = 3)
+        if (Obs.ES[i] >= 0) {
+          core.enrichment[kk] <- ifelse(gene.list.loc[kk] <= 
+                                          Obs.arg.ES[i], "YES", "NO")
+        }else {
+          core.enrichment[kk] <- ifelse(gene.list.loc[kk] > 
+                                          Obs.arg.ES[i], "YES", "NO")
+        }
+        kk <- kk + 1
       }
     }
-    
-    gene.report <- data.frame(cbind(gene.number, gene.symbols, gene.descs, 
-      gene.list.loc, gene.rnk, gene.RES, core.enrichment))
+    gene.report <- data.frame(cbind(gene.number, gene.symbols, 
+                                    gene.descs, gene.list.loc, gene.rnk, gene.RES, 
+                                    core.enrichment))
     if (gsea.type == "GSEA") {
       if (rank.metric == "S2N") {
-     names(gene.report) <- c("#", "GENE SYMBOL", "DESC", "LIST LOC", 
-       "S2N", "RES", "CORE_ENRICHMENT")
+        names(gene.report) <- c("#", "GENE SYMBOL", 
+                                "DESC", "LIST LOC", "S2N", "RES", "CORE_ENRICHMENT")
       }
       if (rank.metric == "ttest") {
-     names(gene.report) <- c("#", "GENE SYMBOL", "DESC", "LIST LOC", 
-       "TTest", "RES", "CORE_ENRICHMENT")
+        names(gene.report) <- c("#", "GENE SYMBOL", 
+                                "DESC", "LIST LOC", "TTest", "RES", "CORE_ENRICHMENT")
       }
-    } else if (gsea.type == "preranked") {
-      names(gene.report) <- c("#", "GENE SYMBOL", "DESC", "LIST LOC", 
-     "RNK", "RES", "CORE_ENRICHMENT")
+    }else if (gsea.type == "preranked") {
+      names(gene.report) <- c("#", "GENE SYMBOL", 
+                              "DESC", "LIST LOC", "RNK", "RES", "CORE_ENRICHMENT")
     }
-    
-    # print(gene.report)
-    
     if (output.directory != "") {
-      
-      filename <- paste(output.directory, doc.string, ".", gs.names[i], 
-     ".report.", phen.tag, ".", loc, ".txt", sep = "", collapse = "")
-      write.table(gene.report, file = filename, quote = FALSE, row.names = FALSE, 
-     sep = "\t", na = "")
-      
-      gs.filename <- paste(output.directory, doc.string, ".", gs.names[i], 
-     ".plot.", phen.tag, ".", loc, ".pdf", sep = "", collapse = "")
+      filename <- paste(output.directory, doc.string, 
+                        ".", gs.names[i], ".report.", phen.tag, ".", 
+                        loc, ".txt", sep = "", collapse = "")
+      write.table(gene.report, file = filename, quote = FALSE, 
+                  row.names = FALSE, sep = "\t", na = "")
+      gs.filename <- paste(output.directory, doc.string, 
+                           ".", gs.names[i], ".plot.", phen.tag, ".", 
+                           loc, ".pdf", sep = "", collapse = "")
       pdf(file = gs.filename, height = 6, width = 14)
-      
     }
-    
-    nf <- layout(matrix(c(1, 2, 3), 1, 3, byrow = T), 1, c(1, 1, 1), 
-      TRUE)
+    nf <- layout(matrix(c(1, 2, 3), 1, 3, byrow = T), 
+                 1, c(1, 1, 1), TRUE)
     ind <- 1:N
     min.RES <- min(Obs.RES[i, ])
     max.RES <- max(Obs.RES[i, ])
@@ -1313,112 +1309,110 @@ GSEA <- function(input.ds, input.cls, input.chip = "NOCHIP", gene.ann = "", gs.d
     max.plot <- max.RES
     max.corr <- max(obs.rnk)
     min.corr <- min(obs.rnk)
-    Obs.correl.vector.norm <- (obs.rnk - min.corr)/(max.corr - min.corr) * 
+    Obs.correl.vector.norm <- (obs.rnk - min.corr)/(max.corr - 
+                                                      min.corr) * 1.25 * delta + min.plot
+    zero.corr.line <- (-min.corr/(max.corr - min.corr)) * 
       1.25 * delta + min.plot
-    zero.corr.line <- (-min.corr/(max.corr - min.corr)) * 1.25 * delta + 
-      min.plot
     col <- ifelse(Obs.ES[i] > 0, 2, 4)
-    
-    # Running enrichment plot
-    
-    sub.string <- paste("Number of genes: ", N, " (in list), ", size.G[i], 
-      " (in gene set)", sep = "", collapse = "")
-    
+    sub.string <- paste("Number of genes: ", N, " (in list), ", 
+                        size.G[i], " (in gene set)", sep = "", collapse = "")
     main.string <- paste("Enrichment plot:", gs.names[i])
-    plot(ind, Obs.RES[i, ], main = main.string, sub = sub.string, xlab = "Gene List Index", 
-      ylab = "Running Enrichment Score (RES)", xlim = c(1, N), ylim = c(min.plot, 
-     max.plot), type = "l", lwd = 2, cex = 1, col = col)
+    plot(ind, Obs.RES[i, ], main = main.string, sub = sub.string, 
+         xlab = "Gene List Index", ylab = "Running Enrichment Score (RES)", 
+         xlim = c(1, N), ylim = c(min.plot, max.plot), 
+         type = "l", lwd = 2, cex = 1, col = col)
     for (j in seq(1, N, 20)) {
-      lines(c(j, j), c(zero.corr.line, Obs.correl.vector.norm[j]), lwd = 1, 
-     cex = 1, col = colors()[12])  # shading of correlation plot
+      lines(c(j, j), c(zero.corr.line, Obs.correl.vector.norm[j]), 
+            lwd = 1, cex = 1, col = colors()[12])
     }
-    lines(c(1, N), c(0, 0), lwd = 1, lty = 2, cex = 1, col = 1)  # zero RES line
-    lines(c(Obs.arg.ES[i], Obs.arg.ES[i]), c(min.plot, max.plot), lwd = 1, 
-      lty = 3, cex = 1, col = col)  # max enrichment vertical line
+    lines(c(1, N), c(0, 0), lwd = 1, lty = 2, cex = 1, 
+          col = 1)
+    lines(c(Obs.arg.ES[i], Obs.arg.ES[i]), c(min.plot, 
+                                             max.plot), lwd = 1, lty = 3, cex = 1, col = col)
     for (j in 1:N) {
       if (Obs.indicator[i, j] == 1) {
-     lines(c(j, j), c(min.plot + 1.25 * delta, min.plot + 1.75 * delta), 
-       lwd = 1, lty = 1, cex = 1, col = 1)  # enrichment tags
+        lines(c(j, j), c(min.plot + 1.25 * delta, 
+                         min.plot + 1.75 * delta), lwd = 1, lty = 1, 
+              cex = 1, col = 1)
       }
     }
-    lines(ind, Obs.correl.vector.norm, type = "l", lwd = 1, cex = 1, 
-      col = 1)
-    lines(c(1, N), c(zero.corr.line, zero.corr.line), lwd = 1, lty = 1, 
-      cex = 1, col = 1)  # zero correlation horizontal line
+    lines(ind, Obs.correl.vector.norm, type = "l", lwd = 1, 
+          cex = 1, col = 1)
+    lines(c(1, N), c(zero.corr.line, zero.corr.line), 
+          lwd = 1, lty = 1, cex = 1, col = 1)
     temp <- order(abs(obs.rnk), decreasing = T)
     arg.correl <- temp[N]
-    lines(c(arg.correl, arg.correl), c(min.plot, max.plot), lwd = 1, 
-      lty = 3, cex = 1, col = 3)  # zero crossing correlation vertical line
-    
+    lines(c(arg.correl, arg.correl), c(min.plot, max.plot), 
+          lwd = 1, lty = 3, cex = 1, col = 3)
     leg.txt <- paste("\"", phen1, "\" ", sep = "", collapse = "")
-    text(x = 1, y = min.plot, adj = c(0, 0), labels = leg.txt, cex = 1)
-    
+    text(x = 1, y = min.plot, adj = c(0, 0), labels = leg.txt, 
+         cex = 1)
     leg.txt <- paste("\"", phen2, "\" ", sep = "", collapse = "")
-    text(x = N, y = min.plot, adj = c(1, 0), labels = leg.txt, cex = 1)
-    
+    text(x = N, y = min.plot, adj = c(1, 0), labels = leg.txt, 
+         cex = 1)
     adjx <- ifelse(Obs.ES[i] > 0, 0, 1)
-    
-    leg.txt <- paste("Peak at ", Obs.arg.ES[i], sep = "", collapse = "")
-    text(x = Obs.arg.ES[i], y = min.plot + 1.8 * delta, adj = c(adjx, 
-      0), labels = leg.txt, cex = 1)
-    
-    leg.txt <- paste("Zero crossing at ", arg.correl, sep = "", collapse = "")
-    text(x = arg.correl, y = min.plot + 1.95 * delta, adj = c(adjx, 0), 
-      labels = leg.txt, cex = 1)
-    
-    # nominal p-val histogram
-    
-    sub.string <- paste("ES =", signif(Obs.ES[i], digits = 3), " NES =", 
-      signif(Obs.ES.norm[i], digits = 3), "Nom. p-val=", signif(p.vals[i, 
-     1], digits = 3), "FWER=", signif(p.vals[i, 2], digits = 3), "FDR=", 
-      signif(FDR.mean.sorted[i], digits = 3))
+    leg.txt <- paste("Peak at ", Obs.arg.ES[i], sep = "", 
+                     collapse = "")
+    text(x = Obs.arg.ES[i], y = min.plot + 1.8 * delta, 
+         adj = c(adjx, 0), labels = leg.txt, cex = 1)
+    leg.txt <- paste("Zero crossing at ", arg.correl, 
+                     sep = "", collapse = "")
+    text(x = arg.correl, y = min.plot + 1.95 * delta, 
+         adj = c(adjx, 0), labels = leg.txt, cex = 1)
+    sub.string <- paste("ES =", signif(Obs.ES[i], digits = 3), 
+                        " NES =", signif(Obs.ES.norm[i], digits = 3), 
+                        "Nom. p-val=", signif(p.vals[i, 1], digits = 3), 
+                        "FWER=", signif(p.vals[i, 2], digits = 3), "FDR=", 
+                        signif(FDR.mean.sorted[i], digits = 3))
     temp <- density(phi[i, ], adjust = adjust.param)
     x.plot.range <- range(temp$x)
     y.plot.range <- c(-0.125 * max(temp$y), 1.5 * max(temp$y))
-    plot(temp$x, temp$y, type = "l", sub = sub.string, xlim = x.plot.range, 
-      ylim = y.plot.range, lwd = 2, col = 2, main = "Gene Set Null Distribution", 
-      xlab = "ES", ylab = "P(ES)")
+    plot(temp$x, temp$y, type = "l", sub = sub.string, 
+         xlim = x.plot.range, ylim = y.plot.range, lwd = 2, 
+         col = 2, main = "Gene Set Null Distribution", 
+         xlab = "ES", ylab = "P(ES)")
     x.loc <- which.min(abs(temp$x - Obs.ES[i]))
-    lines(c(Obs.ES[i], Obs.ES[i]), c(0, temp$y[x.loc]), lwd = 2, lty = 1, 
-      cex = 1, col = 1)
-    lines(x.plot.range, c(0, 0), lwd = 1, lty = 1, cex = 1, col = 1)
-    
+    lines(c(Obs.ES[i], Obs.ES[i]), c(0, temp$y[x.loc]), 
+          lwd = 2, lty = 1, cex = 1, col = 1)
+    lines(x.plot.range, c(0, 0), lwd = 1, lty = 1, cex = 1, 
+          col = 1)
     leg.txt <- c("Gene Set Null Density", "Observed Gene Set ES value")
     c.vec <- c(2, 1)
     lty.vec <- c(1, 1)
     lwd.vec <- c(2, 2)
-    legend(x = -0.2, y = y.plot.range[2], bty = "n", bg = "white", legend = leg.txt, 
-      lty = lty.vec, lwd = lwd.vec, col = c.vec, cex = 1)
-    
-    leg.txt <- paste("Neg. ES \"", phen2, "\" ", sep = "", collapse = "")
-    text(x = x.plot.range[1], y = -0.1 * max(temp$y), adj = c(0, 0), 
-      labels = leg.txt, cex = 1)
-    leg.txt <- paste(" Pos. ES: \"", phen1, "\" ", sep = "", collapse = "")
-    text(x = x.plot.range[2], y = -0.1 * max(temp$y), adj = c(1, 0), 
-      labels = leg.txt, cex = 1)
-    
-    # create pinkogram for each gene set
-    
+    legend(x = -0.2, y = y.plot.range[2], bty = "n", 
+           bg = "white", legend = leg.txt, lty = lty.vec, 
+           lwd = lwd.vec, col = c.vec, cex = 1)
+    leg.txt <- paste("Neg. ES \"", phen2, "\" ", sep = "", 
+                     collapse = "")
+    text(x = x.plot.range[1], y = -0.1 * max(temp$y), 
+         adj = c(0, 0), labels = leg.txt, cex = 1)
+    leg.txt <- paste(" Pos. ES: \"", phen1, "\" ", sep = "", 
+                     collapse = "")
+    text(x = x.plot.range[2], y = -0.1 * max(temp$y), 
+         adj = c(1, 0), labels = leg.txt, cex = 1)
     kk <- 1
     if (gsea.type == "GSEA") {
       pinko <- matrix(0, nrow = size.G[i], ncol = cols)
-      pinko.gene.names <- vector(length = size.G[i], mode = "character")
+      pinko.gene.names <- vector(length = size.G[i], 
+                                 mode = "character")
       for (k in 1:rows) {
-     if (Obs.indicator[i, k] == 1) {
-       pinko[kk, ] <- A[obs.index[k], ]
-       pinko.gene.names[kk] <- obs.gene.symbols[k]
-       kk <- kk + 1
-     }
+        if (Obs.indicator[i, k] == 1) {
+          pinko[kk, ] <- A[obs.index[k], ]
+          pinko.gene.names[kk] <- obs.gene.symbols[k]
+          kk <- kk + 1
+        }
       }
-      GSEA.HeatMapPlot(V = pinko, row.names = pinko.gene.names, col.labels = class.labels, 
-     col.classes = class.phen, col.names = sample.names, main = " Heat Map for Genes in Gene Set", 
-     xlab = " ", ylab = " ")
+      GSEA.HeatMapPlot(V = pinko, row.names = pinko.gene.names, 
+                       col.labels = class.labels, col.classes = class.phen, 
+                       col.names = sample.names, main = " Heat Map for Genes in Gene Set", 
+                       xlab = " ", ylab = " ")
     }
-    dev.off()
-    
-   }  # if p.vals thres
-  
- }  # loop over gene sets
+    tryCatch(dev.off(), error = function(e) NULL)
+    tryCatch(dev.off(), error = function(e) NULL)
+    tryCatch(dev.off(), error = function(e) NULL)
+  }
+})# loop over gene sets
  
  return(list(report1 = report.phen1, report2 = report.phen2))
  
